@@ -286,3 +286,65 @@ class GlobalExceptionHandler {
             .body(new ErrorResponse(ex.getMessage()));
     }
 }
+
+@Service
+@Slf4j
+class CognitiveComputing {
+    private final MetricRegistry metrics;
+    private final NeuralNetworkService nnService;
+
+    @Async
+    public CompletableFuture<Void> integrateAsync() {
+        Timer.Context context = metrics.timer("cognitive.integration.time").time();
+        try {
+            log.info("Starting cognitive integration...");
+            nnService.initializeModels();
+            nnService.trainAndOptimize();
+            log.info("Cognitive integration completed.");
+            return CompletableFuture.completedFuture(null);
+        } catch (Exception e) {
+            log.error("Cognitive integration failed", e);
+            throw new CloudInfrastructureException("Cognitive integration failed", e);
+        } finally {
+            context.stop();
+        }
+    }
+}
+
+name: Build and Deploy JAR app to Azure Web App
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Set up Java version
+      uses: actions/setup-java@v3
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+
+    - name: Navigate to correct directory
+      run: |
+        if [ -f ./<ordnername>/pom.xml ]; then
+          cd ./<ordnername>
+        fi
+
+    - name: Build with Maven
+      run: mvn clean package
+
+    - name: Deploy to Azure Web App
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: 'DeineWebApp'
+        slot-name: 'production'
+        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        package: target/*.jar
